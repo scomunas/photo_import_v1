@@ -1,0 +1,32 @@
+version: '3.8'
+
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: photo_import_db
+    restart: always
+    environment:
+      POSTGRES_DB: photo_import
+      POSTGRES_USER: user_photo
+      POSTGRES_PASSWORD: password_photo
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+
+  backend:
+    build: .
+    container_name: photo_import_back
+    restart: always
+    depends_on:
+      - db
+    environment:
+      DB_HOST: db
+      DB_NAME: photo_import
+      DB_USER: user_photo
+      DB_PASSWORD: password_photo
+    ports:
+      - "8080:8080"
+
+volumes:
+  postgres_data:

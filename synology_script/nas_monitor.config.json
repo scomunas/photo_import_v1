@@ -1,0 +1,16 @@
+{
+    "endpoint_ip": "192.168.68.50",
+    "endpoint_port": 8080,
+    "folders_to_watch": [
+        "/volume2/photo/import"
+    ],
+    "heartbeat_minutes": 5,
+    "extensions": [
+        ".jpg",
+        ".jpeg",
+        ".png",
+        ".heic",
+        ".mp4",
+        ".mov"
+    ]
+}
