@@ -1,0 +1,140 @@
+.page-header {
+  margin-bottom: 3rem;
+}
+
+.header-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.5rem;
+}
+
+h1 {
+  font-size: 2.5rem;
+  font-weight: 800;
+  color: var(--text-main);
+  margin-bottom: 0;
+}
+
+.editing-row {
+  background-color: #f0fdf4;
+}
+
+.subtitle {
+  color: var(--text-muted);
+  font-size: 1rem;
+}
+
+.table-container {
+  background: white;
+  border-radius: 20px;
+  border: 1px solid var(--border);
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.modern-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: 'Inter', sans-serif;
+}
+
+.modern-table th {
+  padding: 1.25rem;
+  background: #f8fafc;
+  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.modern-table td {
+  padding: 1.25rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+  text-align: left;
+  color: var(--text-main);
+}
+
+.badge.action {
+  font-weight: 600;
+  padding: 0.35rem 0.75rem;
+  border-radius: 8px;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.badge.action.copy {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.badge.action.move {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.edit-input {
+  width: 100%;
+  padding: 0.6rem;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  font-size: 0.85rem;
+  outline: none;
+}
+
+.actions {
+  text-align: left;
+  width: 180px;
+}
+
+.edit-actions {
+  display: flex;
+  gap: 0.5rem;
+  justify-content: flex-start;
+}
+
+.btn {
+  padding: 0.6rem 1.2rem;
+  border-radius: 10px;
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  border: none;
+  transition: var(--transition);
+}
+
+.btn-primary { 
+  background: var(--accent); 
+  color: white; 
+}
+.btn-primary:hover { 
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.btn-secondary { 
+  background: var(--accent); 
+  color: white; 
+}
+.btn-secondary:hover { 
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+}
+
+.btn-save { background: var(--accent); color: white; }
+.btn-save:hover { background: var(--accent-hover); }
+
+.btn-cancel { background: var(--sidebar-bg); color: white; }
+.btn-cancel:hover { opacity: 0.9; }
+
+.empty-state {
+  text-align: center;
+  padding: 4rem;
+  color: var(--text-muted);
+  font-style: italic;
+}

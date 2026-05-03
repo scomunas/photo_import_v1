@@ -6,27 +6,35 @@ services:
     container_name: photo_import_db
     restart: always
     environment:
-      POSTGRES_DB: photo_import
-      POSTGRES_USER: user_photo
-      POSTGRES_PASSWORD: password_photo
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
       - "5432:5432"
 
   backend:
-    build: .
+    build: ./back
     container_name: photo_import_back
     restart: always
     depends_on:
       - db
+    env_file:
+      - ./.env
     environment:
-      DB_HOST: db
-      DB_NAME: photo_import
-      DB_USER: user_photo
-      DB_PASSWORD: password_photo
+      - NAS_SERVER_URL=${NAS_SERVER_URL:-http://192.168.68.113:9090}
     ports:
       - "8080:8080"
+
+  frontend:
+    build: ./front
+    container_name: photo_import_front
+    restart: always
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
 
 volumes:
   postgres_data:

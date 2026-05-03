@@ -1,0 +1,6 @@
+watchdog
+requests
+exifread
+hachoir
+fastapi
+uvicorn

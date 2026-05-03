@@ -1,0 +1,82 @@
+<div class="page-header">
+  <div class="header-main">
+    <h1>Configuration</h1>
+    <button class="btn btn-primary" (click)="startAdd()" *ngIf="!isAdding">Add New Rule</button>
+  </div>
+  <p class="subtitle">Define import rules, source and target paths, and naming templates.</p>
+</div>
+
+<div class="table-container shadow">
+  <table class="modern-table">
+    <thead>
+      <tr>
+        <th>Source Path</th>
+        <th>Target Path</th>
+        <th>Path Template</th>
+        <th>Name Template</th>
+        <th>Action</th>
+        <th class="actions"></th>
+      </tr>
+    </thead>
+    <tbody>
+      <!-- FILA PARA AÑADIR NUEVO -->
+      <tr *ngIf="isAdding && tempConfig" class="editing-row">
+        <td><input type="text" [(ngModel)]="tempConfig.source_path" class="edit-input" placeholder="/volume2/photo/import"></td>
+        <td><input type="text" [(ngModel)]="tempConfig.target_path" class="edit-input" placeholder="/volume2/photo/test"></td>
+        <td><input type="text" [(ngModel)]="tempConfig.path_template" class="edit-input" placeholder="{year}/{month}"></td>
+        <td><input type="text" [(ngModel)]="tempConfig.name_template" class="edit-input" placeholder="{filename}"></td>
+        <td>
+          <select [(ngModel)]="tempConfig.action" class="edit-input">
+            <option value="move">move</option>
+            <option value="copy">copy</option>
+          </select>
+        </td>
+        <td class="actions">
+          <div class="edit-actions">
+            <button class="btn btn-save" (click)="saveEdit()">Save</button>
+            <button class="btn btn-cancel" (click)="cancelEdit()">Cancel</button>
+          </div>
+        </td>
+      </tr>
+
+      <!-- LISTADO DE CONFIGS EXISTENTES -->
+      <tr *ngFor="let config of configs">
+        <!-- MODO LECTURA -->
+        <ng-container *ngIf="editingId !== config.id">
+          <td>{{ config.source_path }}</td>
+          <td>{{ config.target_path }}</td>
+          <td>{{ config.path_template }}</td>
+          <td>{{ config.name_template }}</td>
+          <td><span class="badge action" [class.copy]="config.action === 'copy'" [class.move]="config.action === 'move'">{{ config.action }}</span></td>
+          <td class="actions">
+            <button class="btn btn-secondary" (click)='startEdit(config)'>Edit</button>
+          </td>
+        </ng-container>
+
+        <!-- MODO EDICIÓN -->
+        <ng-container *ngIf="editingId === config.id && tempConfig">
+          <td><input type="text" [(ngModel)]="tempConfig.source_path" class="edit-input"></td>
+          <td><input type="text" [(ngModel)]="tempConfig.target_path" class="edit-input"></td>
+          <td><input type="text" [(ngModel)]="tempConfig.path_template" class="edit-input"></td>
+          <td><input type="text" [(ngModel)]="tempConfig.name_template" class="edit-input"></td>
+          <td>
+            <select [(ngModel)]="tempConfig.action" class="edit-input">
+              <option value="move">move</option>
+              <option value="copy">copy</option>
+            </select>
+          </td>
+          <td class="actions">
+            <div class="edit-actions">
+              <button class="btn btn-save" (click)="saveEdit()">Save</button>
+              <button class="btn btn-cancel" (click)="cancelEdit()">Cancel</button>
+            </div>
+          </td>
+        </ng-container>
+      </tr>
+      
+      <tr *ngIf="configs.length === 0 && !isAdding">
+        <td colspan="6" class="empty-state">No hay configuraciones definidas. Añádelas con el botón superior.</td>
+      </tr>
+    </tbody>
+  </table>
+</div>

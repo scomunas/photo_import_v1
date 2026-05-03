@@ -1,16 +1,22 @@
 {
-    "endpoint_ip": "192.168.68.50",
+    "endpoint_ip": "192.168.68.113",
     "endpoint_port": 8080,
     "folders_to_watch": [
-        "/volume2/photo/import"
+        "/volume2/photo/import",
+        "/volume1/homes/scomunas/Photos/"
     ],
     "heartbeat_minutes": 5,
-    "extensions": [
+    "photo_extensions": [
         ".jpg",
         ".jpeg",
         ".png",
         ".heic",
+        ".tiff"
+    ],
+    "video_extensions": [
         ".mp4",
-        ".mov"
+        ".mov",
+        ".avi",
+        ".mkv"
     ]
 }
