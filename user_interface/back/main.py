@@ -343,3 +343,8 @@ async def process_file(file_id: int):
 @app.get("/")
 def read_root():
     return {"message": "NAS Monitor Backend is running"}
+
+if __name__ == "__main__":
+    import uvicorn
+    
+    uvicorn.run(app, host="0.0.0.0", port=int(BACKEND_PORT))
