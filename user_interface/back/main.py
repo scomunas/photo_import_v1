@@ -166,7 +166,7 @@ async def trigger_scan(config_id: int):
     
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            headers = {"X-API-KEY": os.getenv("NAS_API_KEY", "")}
+            headers = {"X-API-KEY": NAS_API_KEY}
             response = await client.post(
                 f"{NAS_SERVER_URL}/scan",
                 json={"path": config["source_path"]},
@@ -198,7 +198,7 @@ async def process_import(config: dict):
         processed_count = 0
         
         async with httpx.AsyncClient(timeout=30.0) as client:
-            headers = {"X-API-KEY": os.getenv("NAS_API_KEY", "")}
+            headers = {"X-API-KEY": NAS_API_KEY}
             for file in files:
                 file_path = f"{file['file_path']}/{file['file_name']}".replace('\\', '/').replace('//', '/')
                 
@@ -299,7 +299,7 @@ async def process_file(file_id: int):
     # 2. Llamar al NAS server
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            headers = {"X-API-KEY": os.getenv("NAS_API_KEY", os.getenv("API_KEY", ""))}
+            headers = {"X-API-KEY": NAS_API_KEY}
             source_file = f"{file['original_path']}/{file['original_filename']}".replace('\\', '/').replace('//', '/')
             destination_file = f"{file['target_path']}/{file['target_filename']}".replace('\\', '/').replace('//', '/')
             
