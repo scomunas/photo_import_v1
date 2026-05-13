@@ -129,10 +129,14 @@ async def receive_file(data: FileData):
 async def health_check():
     db_ok = database.check_db_health()
     nas_ok = False
-    if nas_status["last_heartbeat"]:
-        delta = datetime.now() - nas_status["last_heartbeat"]
-        if delta.total_seconds() < 120:
-            nas_ok = True
+    try:
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            response = await client.get(f"{NAS_SERVER_URL}/health", headers={"X-API-KEY": NAS_API_KEY})
+            if response.status_code == 200:
+                nas_ok = True
+    except:
+        nas_ok = False
+        
     return {
         "database": "online" if db_ok else "offline",
         "nas": "online" if nas_ok else "offline"

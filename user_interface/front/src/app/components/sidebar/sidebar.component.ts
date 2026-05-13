@@ -1,7 +1,8 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
 import { StatusService, SystemStatus } from '../../services/status.service';
+import { interval, Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-sidebar',
@@ -10,7 +11,7 @@ import { StatusService, SystemStatus } from '../../services/status.service';
   templateUrl: './sidebar.component.html',
   styleUrl: './sidebar.component.css'
 })
-export class SidebarComponent implements OnInit {
+export class SidebarComponent implements OnInit, OnDestroy {
   isCollapsed = false;
   status: SystemStatus = {
     status: 'checking',
@@ -18,11 +19,20 @@ export class SidebarComponent implements OnInit {
     nas: 'offline',
     version: '...'
   };
+  private statusSub?: Subscription;
 
   constructor(private statusService: StatusService) {}
 
   ngOnInit() {
     this.checkStatus();
+    // Refrescar cada 30 segundos
+    this.statusSub = interval(30000).subscribe(() => this.checkStatus());
+  }
+
+  ngOnDestroy() {
+    if (this.statusSub) {
+      this.statusSub.unsubscribe();
+    }
   }
 
   checkStatus() {

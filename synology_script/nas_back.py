@@ -335,6 +335,10 @@ async def file_operation(payload: FileOperationRequest, api_key: str = Depends(v
         logger.error(f"File operation failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+@app.get("/health")
+async def health_check():
+    return {"status": "online"}
+
 if __name__ == "__main__":
     logger.info("--- SERVER STARTING ---")
     logger.info(f"Log file: {log_filename}")
