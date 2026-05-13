@@ -20,7 +20,7 @@ export interface ProcessedFile {
   providedIn: 'root'
 })
 export class FileService {
-  private apiUrl = 'http://localhost:8080/files';
+  private apiUrl = ((window as any).__env?.apiUrl || 'http://localhost:8080') + '/files';
 
   constructor(private http: HttpClient) { }
 

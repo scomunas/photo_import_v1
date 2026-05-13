@@ -16,7 +16,7 @@ export interface ImportConfig {
   providedIn: 'root'
 })
 export class ConfigService {
-  private apiUrl = 'http://localhost:8080/configs';
+  private apiUrl = ((window as any).__env?.apiUrl || 'http://localhost:8080') + '/configs';
 
   constructor(private http: HttpClient) { }
 

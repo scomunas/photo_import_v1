@@ -22,8 +22,13 @@ from dotenv import load_dotenv
 load_dotenv(dotenv_path="./user_interface/.env")
 
 # Read variables
-NAS_SERVER_URL = os.getenv("NAS_SERVER_URL")
-NAS_API_KEY = os.getenv("NAS_API_KEY")
+NAS_IP = os.getenv("NAS_IP", "localhost")
+NAS_PORT = os.getenv("NAS_PORT", "8000")
+NAS_SERVER_URL = f"http://{NAS_IP}:{NAS_PORT}"
+
+API_KEY = os.getenv("API_KEY", "")
+NAS_API_KEY = API_KEY  # Unificamos la API_KEY
+
 BACKEND_PORT = os.getenv("BACKEND_PORT", "8080")
 
 app = FastAPI()

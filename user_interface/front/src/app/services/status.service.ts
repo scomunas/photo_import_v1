@@ -13,7 +13,7 @@ export interface SystemStatus {
   providedIn: 'root'
 })
 export class StatusService {
-  private apiUrl = 'http://localhost:8080/health';
+  private apiUrl = ((window as any).__env?.apiUrl || 'http://localhost:8080') + '/health';
 
   constructor(private http: HttpClient) { }
 

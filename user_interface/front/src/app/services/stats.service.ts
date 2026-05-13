@@ -17,7 +17,7 @@ export interface DailyStat {
   providedIn: 'root'
 })
 export class StatsService {
-  private apiUrl = 'http://localhost:8080/stats';
+  private apiUrl = ((window as any).__env?.apiUrl || 'http://localhost:8080') + '/stats';
 
   constructor(private http: HttpClient) { }
 
