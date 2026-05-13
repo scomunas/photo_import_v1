@@ -22,8 +22,6 @@ services:
       - db
     env_file:
       - ./.env
-    environment:
-      - NAS_SERVER_URL=${NAS_SERVER_URL:-http://192.168.68.113:9090}
     ports:
       - "8080:8080"
 
@@ -31,10 +29,11 @@ services:
     build: ./front
     container_name: photo_import_front
     restart: always
-    ports:
-      - "5173:5173"
+    env_file:
+      - ./.env
     depends_on:
       - backend
-
+    ports:
+      - "5173:5173"
 volumes:
   postgres_data:

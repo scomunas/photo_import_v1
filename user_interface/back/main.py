@@ -1,13 +1,30 @@
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from datetime import datetime
 import database
 import os
 import httpx
+import logging
 
-# URL del NAS Server (donde se ejecuta nas_server.py)
-NAS_SERVER_URL = os.getenv("NAS_SERVER_URL", "http://localhost:9090")
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[
+        logging.FileHandler("backend.log", encoding="utf-8"),
+        logging.StreamHandler()
+    ]
+)
+
+# Load environment variables from user_interface/.env
+from dotenv import load_dotenv
+load_dotenv(dotenv_path="./user_interface/.env")
+
+# Read variables
+NAS_SERVER_URL = os.getenv("NAS_SERVER_URL")
+NAS_API_KEY = os.getenv("NAS_API_KEY")
+BACKEND_PORT = os.getenv("BACKEND_PORT", "8080")
 
 app = FastAPI()
 
@@ -136,6 +153,113 @@ async def update_config(config_id: int, data: dict):
     if database.update_config(config_id, data): return {"status": "success"}
     raise HTTPException(status_code=500, detail="Failed to update configuration")
 
+@app.post("/configs/{config_id}/scan")
+async def trigger_scan(config_id: int):
+    config = database.get_config_by_id(config_id)
+    if not config:
+        raise HTTPException(status_code=404, detail="Config not found")
+    
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            headers = {"X-API-KEY": os.getenv("NAS_API_KEY", "")}
+            response = await client.post(
+                f"{NAS_SERVER_URL}/scan",
+                json={"path": config["source_path"]},
+                headers=headers
+            )
+        if response.status_code == 202:
+            return response.json()
+        else:
+            error_msg = response.json().get("detail", f"NAS error {response.status_code}")
+            raise HTTPException(status_code=response.status_code, detail=error_msg)
+    except httpx.RequestError as e:
+        raise HTTPException(status_code=503, detail=f"NAS unreachable: {str(e)}")
+
+@app.get("/configs/{config_id}/scans")
+async def get_config_scans(config_id: int):
+    config = database.get_config_by_id(config_id)
+    if not config:
+        raise HTTPException(status_code=404, detail="Config not found")
+    return database.get_scans_by_path(config["source_path"])
+
+async def process_import(config: dict):
+    config_id = config['id']
+    try:
+        files = database.get_unprocessed_nas_files(config['source_path'])
+        if not files:
+            return
+            
+        scan_id = files[0].get('scan_id')
+        processed_count = 0
+        
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            headers = {"X-API-KEY": os.getenv("NAS_API_KEY", "")}
+            for file in files:
+                file_path = f"{file['file_path']}/{file['file_name']}".replace('\\', '/').replace('//', '/')
+                
+                try:
+                    response = await client.post(
+                        f"{NAS_SERVER_URL}/metadata",
+                        json={"file_path": file_path},
+                        headers=headers
+                    )
+                    
+                    if response.status_code == 200:
+                        meta = response.json()
+                        date_taken = meta.get("date_taken")
+                        if not date_taken:
+                            logging.warning(f"Skipped {file_path}: No date_taken returned")
+                            continue
+                            
+                        data_dict = {
+                            "path": file['file_path'],
+                            "filename": file['file_name'],
+                            "date_taken": date_taken
+                        }
+                        
+                        target_folder = resolve_template(config['path_template'], data_dict)
+                        target_filename_raw = resolve_template(config['name_template'], data_dict)
+                        
+                        ext = os.path.splitext(file['file_name'])[1]
+                        if not target_filename_raw.lower().endswith(ext.lower()):
+                            target_filename = target_filename_raw + ext
+                        else:
+                            target_filename = target_filename_raw
+
+                        final_target_path = os.path.join(config['target_path'], target_folder).replace('\\', '/').rstrip('/')
+
+                        success = database.save_processed_file({
+                            "original_path": file['file_path'],
+                            "original_filename": file['file_name'],
+                            "target_path": final_target_path,
+                            "target_filename": target_filename,
+                            "date_taken": date_taken,
+                            "action": config.get('action', 'move')
+                        })
+                        if success:
+                            processed_count += 1
+                        else:
+                            logging.warning(f"Skipped {file_path}: Failed to save in processed_files")
+                except Exception as e:
+                    logging.error(f"Import failed for {file_path}: {e}")
+                    
+        if scan_id and processed_count > 0:
+            database.update_scan_imported_count(scan_id, processed_count)
+            
+    finally:
+        database.set_config_import_status(config_id, 'idle')
+
+@app.post("/configs/{config_id}/import")
+async def trigger_import(config_id: int, background_tasks: BackgroundTasks):
+    config = database.get_config_by_id(config_id)
+    if not config:
+        raise HTTPException(status_code=404, detail="Config not found")
+        
+    database.set_config_import_status(config_id, 'importing')
+    background_tasks.add_task(process_import, config)
+    
+    return {"status": "importing"}
+
 @app.get("/stats/kpis")
 async def get_stats_kpis(start_date: str = None, end_date: str = None):
     return database.get_stats_kpis(start_date, end_date)
@@ -170,15 +294,18 @@ async def process_file(file_id: int):
     # 2. Llamar al NAS server
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
+            headers = {"X-API-KEY": os.getenv("NAS_API_KEY", os.getenv("API_KEY", ""))}
+            source_file = f"{file['original_path']}/{file['original_filename']}".replace('\\', '/').replace('//', '/')
+            destination_file = f"{file['target_path']}/{file['target_filename']}".replace('\\', '/').replace('//', '/')
+            
             response = await client.post(
-                f"{NAS_SERVER_URL}/action",
+                f"{NAS_SERVER_URL}/file",
                 json={
-                    "original_path": file["original_path"],
-                    "original_filename": file["original_filename"],
-                    "target_path": file["target_path"],
-                    "target_filename": file["target_filename"],
+                    "source": source_file,
+                    "destination": destination_file,
                     "action": action
-                }
+                },
+                headers=headers
             )
         if response.status_code == 200:
             database.set_file_status(file_id, "completed")

@@ -1,6 +1,7 @@
-watchdog
-requests
-exifread
-hachoir
 fastapi
 uvicorn
+psycopg2-binary
+python-dotenv
+pydantic
+exifread
+hachoir

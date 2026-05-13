@@ -26,7 +26,8 @@ def init_db():
                 target_path TEXT NOT NULL,
                 path_template TEXT NOT NULL,
                 name_template TEXT NOT NULL DEFAULT '{filename}',
-                action TEXT NOT NULL DEFAULT 'move'
+                action TEXT NOT NULL DEFAULT 'move',
+                import_status TEXT DEFAULT 'idle'
             )
         """)
         
@@ -150,6 +151,19 @@ def get_all_configs():
     finally:
         if 'conn' in locals(): conn.close()
 
+def get_config_by_id(config_id):
+    """Obtiene una configuración de importación por su ID."""
+    try:
+        conn = get_connection()
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("SELECT * FROM import_configs WHERE id = %s", (config_id,))
+            return cur.fetchone()
+    except Exception as e:
+        print(f"[ERROR] Error obteniendo config {config_id}: {e}")
+        return None
+    finally:
+        if 'conn' in locals(): conn.close()
+
 def add_config(data):
     """Añade una nueva configuración de importación."""
     try:
@@ -266,5 +280,86 @@ def get_daily_stats(start_date=None, end_date=None):
     except Exception as e:
         print(f"[ERROR] Error en daily stats: {e}")
         return []
+    finally:
+        if 'conn' in locals(): conn.close()
+
+def get_scans_by_path(path):
+    """Obtiene el historial de escaneos para un path específico."""
+    try:
+        conn = get_connection()
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT id, path, status, total_count, imported_count, created_at
+                FROM nas_scans
+                WHERE path = %s
+                ORDER BY created_at DESC
+            """, (path,))
+            return cur.fetchall()
+    except Exception as e:
+        print(f"[ERROR] Error obteniendo escaneos para {path}: {e}")
+        return []
+    finally:
+        if 'conn' in locals(): conn.close()
+
+def get_unprocessed_nas_files(config_source_path):
+    """Obtiene los archivos del último escaneo completado que no están en procesados."""
+    try:
+        conn = get_connection()
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            cur.execute("""
+                SELECT nf.file_path, nf.file_name, nf.scan_id
+                FROM nas_files nf
+                JOIN nas_scans ns ON nf.scan_id = ns.id
+                WHERE ns.id = (
+                    SELECT id FROM nas_scans 
+                    WHERE path = %s AND status = 'completed'
+                    ORDER BY created_at DESC LIMIT 1
+                )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM processed_files pf
+                      WHERE pf.original_path = nf.file_path
+                        AND pf.original_filename = nf.file_name
+                  )
+            """, (config_source_path,))
+            return cur.fetchall()
+    except Exception as e:
+        print(f"[ERROR] Error obteniendo archivos no procesados: {e}")
+        return []
+    finally:
+        if 'conn' in locals(): conn.close()
+
+def update_scan_imported_count(scan_id, imported_count):
+    """Suma la cantidad de ficheros importados a un escaneo."""
+    try:
+        conn = get_connection()
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE nas_scans 
+                SET imported_count = COALESCE(imported_count, 0) + %s
+                WHERE id = %s
+            """, (imported_count, scan_id))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[ERROR] Error actualizando imported_count para scan {scan_id}: {e}")
+        return False
+    finally:
+        if 'conn' in locals(): conn.close()
+
+def set_config_import_status(config_id, status):
+    """Actualiza el estado de importación de una configuración."""
+    try:
+        conn = get_connection()
+        with conn.cursor() as cur:
+            cur.execute("""
+                UPDATE import_configs 
+                SET import_status = %s
+                WHERE id = %s
+            """, (status, config_id))
+        conn.commit()
+        return True
+    except Exception as e:
+        print(f"[ERROR] Error actualizando estado de importación para config {config_id}: {e}")
+        return False
     finally:
         if 'conn' in locals(): conn.close()

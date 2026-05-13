@@ -1,7 +1,13 @@
 <div class="page-header">
   <div class="header-main">
     <h1>Configuration</h1>
-    <button class="btn btn-primary" (click)="startAdd()" *ngIf="!isAdding">Add New Rule</button>
+    <div style="display: flex; gap: 0.8rem; align-items: center;">
+      <button class="btn btn-success" style="display:inline-flex; align-items:center;" (click)="scanAll()" [disabled]="isScanningAll || configs.length === 0">
+        <svg *ngIf="isScanningAll" style="animation: spin 1s linear infinite; margin-right: 0.4rem;" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+        {{ isScanningAll ? 'Scanning...' : 'Scan All' }}
+      </button>
+      <button class="btn btn-primary" (click)="startAdd()" *ngIf="!isAdding">Add New Rule</button>
+    </div>
   </div>
   <p class="subtitle">Define import rules, source and target paths, and naming templates.</p>
 </div>
@@ -21,18 +27,18 @@
     <tbody>
       <!-- FILA PARA AÑADIR NUEVO -->
       <tr *ngIf="isAdding && tempConfig" class="editing-row">
-        <td><input type="text" [(ngModel)]="tempConfig.source_path" class="edit-input" placeholder="/volume2/photo/import"></td>
-        <td><input type="text" [(ngModel)]="tempConfig.target_path" class="edit-input" placeholder="/volume2/photo/test"></td>
-        <td><input type="text" [(ngModel)]="tempConfig.path_template" class="edit-input" placeholder="{year}/{month}"></td>
-        <td><input type="text" [(ngModel)]="tempConfig.name_template" class="edit-input" placeholder="{filename}"></td>
-        <td>
+        <td data-label="Source Path"><input type="text" [(ngModel)]="tempConfig.source_path" class="edit-input" placeholder="/volume2/photo/import"></td>
+        <td data-label="Target Path"><input type="text" [(ngModel)]="tempConfig.target_path" class="edit-input" placeholder="/volume2/photo/test"></td>
+        <td data-label="Path Template"><input type="text" [(ngModel)]="tempConfig.path_template" class="edit-input" placeholder="{year}/{month}"></td>
+        <td data-label="Name Template"><input type="text" [(ngModel)]="tempConfig.name_template" class="edit-input" placeholder="{filename}"></td>
+        <td data-label="Action">
           <select [(ngModel)]="tempConfig.action" class="edit-input">
             <option value="move">move</option>
             <option value="copy">copy</option>
           </select>
         </td>
         <td class="actions">
-          <div class="edit-actions">
+          <div class="action-buttons">
             <button class="btn btn-save" (click)="saveEdit()">Save</button>
             <button class="btn btn-cancel" (click)="cancelEdit()">Cancel</button>
           </div>
@@ -40,39 +46,95 @@
       </tr>
 
       <!-- LISTADO DE CONFIGS EXISTENTES -->
-      <tr *ngFor="let config of configs">
-        <!-- MODO LECTURA -->
-        <ng-container *ngIf="editingId !== config.id">
-          <td>{{ config.source_path }}</td>
-          <td>{{ config.target_path }}</td>
-          <td>{{ config.path_template }}</td>
-          <td>{{ config.name_template }}</td>
-          <td><span class="badge action" [class.copy]="config.action === 'copy'" [class.move]="config.action === 'move'">{{ config.action }}</span></td>
-          <td class="actions">
-            <button class="btn btn-secondary" (click)='startEdit(config)'>Edit</button>
-          </td>
-        </ng-container>
+      <ng-container *ngFor="let config of configs">
+        <tr class="expandable-row" [class.expanded]="isExpanded(config.id)" (click)="editingId !== config.id ? toggleRow(config.id) : null">
+          <!-- MODO LECTURA -->
+          <ng-container *ngIf="editingId !== config.id">
+            <td data-label="Source Path">
+              <span class="expand-icon">{{ isExpanded(config.id) ? '▼' : '▶' }}</span>
+              {{ config.source_path }}
+            </td>
+            <td data-label="Target Path">{{ config.target_path }}</td>
+            <td data-label="Path Template">{{ config.path_template }}</td>
+            <td data-label="Name Template">{{ config.name_template }}</td>
+            <td data-label="Action"><span class="badge action" [class.copy]="config.action === 'copy'" [class.move]="config.action === 'move'">{{ config.action }}</span></td>
+            <td class="actions">
+              <div class="action-buttons" style="justify-content: flex-end;">
+                <button class="btn btn-action-edit btn-icon" (click)="startEdit(config); $event.stopPropagation()" title="Edit">
+                  <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/><path d="m15 5 4 4"/></svg>
+                </button>
+                <button class="btn btn-success" style="display:inline-flex; align-items:center; gap:0.4rem;" (click)="onScanClick(config.id, $event)" [disabled]="config.import_status === 'importing'">
+                  Scan
+                </button>
+                <button class="btn btn-action-import" style="display:inline-flex; align-items:center; gap:0.4rem;" (click)="onImportClick(config.id, $event)" [disabled]="config.import_status === 'importing'">
+                  <svg *ngIf="config.import_status !== 'importing'" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></svg>
+                  <svg *ngIf="config.import_status === 'importing'" style="animation: spin 1s linear infinite" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
+                  {{ config.import_status === 'importing' ? 'Importing' : 'Import' }}
+                </button>
+              </div>
+            </td>
+          </ng-container>
 
-        <!-- MODO EDICIÓN -->
-        <ng-container *ngIf="editingId === config.id && tempConfig">
-          <td><input type="text" [(ngModel)]="tempConfig.source_path" class="edit-input"></td>
-          <td><input type="text" [(ngModel)]="tempConfig.target_path" class="edit-input"></td>
-          <td><input type="text" [(ngModel)]="tempConfig.path_template" class="edit-input"></td>
-          <td><input type="text" [(ngModel)]="tempConfig.name_template" class="edit-input"></td>
-          <td>
-            <select [(ngModel)]="tempConfig.action" class="edit-input">
-              <option value="move">move</option>
-              <option value="copy">copy</option>
-            </select>
-          </td>
-          <td class="actions">
-            <div class="edit-actions">
-              <button class="btn btn-save" (click)="saveEdit()">Save</button>
-              <button class="btn btn-cancel" (click)="cancelEdit()">Cancel</button>
+          <!-- MODO EDICIÓN -->
+          <ng-container *ngIf="editingId === config.id && tempConfig">
+            <td data-label="Source Path"><input type="text" [(ngModel)]="tempConfig.source_path" class="edit-input"></td>
+            <td data-label="Target Path"><input type="text" [(ngModel)]="tempConfig.target_path" class="edit-input"></td>
+            <td data-label="Path Template"><input type="text" [(ngModel)]="tempConfig.path_template" class="edit-input"></td>
+            <td data-label="Name Template"><input type="text" [(ngModel)]="tempConfig.name_template" class="edit-input"></td>
+            <td data-label="Action">
+              <select [(ngModel)]="tempConfig.action" class="edit-input">
+                <option value="move">move</option>
+                <option value="copy">copy</option>
+              </select>
+            </td>
+            <td class="actions">
+              <div class="action-buttons">
+                <button class="btn btn-save" (click)="saveEdit(); $event.stopPropagation()">Save</button>
+                <button class="btn btn-cancel" (click)="cancelEdit(); $event.stopPropagation()">Cancel</button>
+              </div>
+            </td>
+          </ng-container>
+        </tr>
+
+        <!-- FILA DESPLEGABLE (SCANS) -->
+        <tr *ngIf="isExpanded(config.id)" class="scans-row">
+          <td colspan="6" class="scans-cell">
+            <div class="scans-container shadow-sm">
+              <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                <h4 class="scans-title" style="margin-bottom: 0;">Scan History</h4>
+                <button class="btn btn-icon" style="background: transparent; border: 1px solid var(--border); color: var(--text-muted);" (click)="loadScans(config.id); $event.stopPropagation()" title="Refresh Status">
+                  <svg [style.animation]="isRefreshingScan[config.id] ? 'spin 1s linear infinite' : 'none'" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>
+                </button>
+              </div>
+              <table class="scans-table" *ngIf="scansData[config.id] && scansData[config.id].length > 0; else noScans">
+                <thead>
+                  <tr>
+                    <th>Scan ID</th>
+                    <th>Date</th>
+                    <th>Status</th>
+                    <th>Files Found</th>
+                    <th>Imported</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr *ngFor="let scan of scansData[config.id]">
+                    <td class="mono-text">{{ scan.id | slice:0:8 }}</td>
+                    <td>{{ scan.created_at | date:'medium' }}</td>
+                    <td>
+                      <span class="badge status" [ngClass]="scan.status">{{ scan.status }}</span>
+                    </td>
+                    <td>{{ scan.total_count }}</td>
+                    <td style="font-weight: 600; color: #059669;">{{ scan.imported_count || 0 }}</td>
+                  </tr>
+                </tbody>
+              </table>
+              <ng-template #noScans>
+                <p class="empty-state-small">No scans found for this path.</p>
+              </ng-template>
             </div>
           </td>
-        </ng-container>
-      </tr>
+        </tr>
+      </ng-container>
       
       <tr *ngIf="configs.length === 0 && !isAdding">
         <td colspan="6" class="empty-state">No hay configuraciones definidas. Añádelas con el botón superior.</td>

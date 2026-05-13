@@ -39,6 +39,23 @@ h1 {
   font-family: 'Inter', sans-serif;
 }
 
+/* Tight columns that must never wrap and adapt exactly to content */
+.modern-table th:nth-child(5), .modern-table td:nth-child(5), /* Action */
+.modern-table th:nth-child(6), .modern-table td:nth-child(6)  /* Actions */
+{
+  width: 1%;
+  white-space: nowrap;
+}
+
+/* Flexible columns that can wrap to multiple lines if needed */
+.modern-table th:nth-child(1), .modern-table td:nth-child(1), /* Source Path */
+.modern-table th:nth-child(2), .modern-table td:nth-child(2), /* Target Path */
+.modern-table th:nth-child(3), .modern-table td:nth-child(3), /* Path Template */
+.modern-table th:nth-child(4), .modern-table td:nth-child(4)  /* Name Template */
+{
+  width: auto;
+}
+
 .modern-table th {
   padding: 1.25rem;
   background: #f8fafc;
@@ -57,6 +74,58 @@ h1 {
   font-size: 0.9rem;
   text-align: left;
   color: var(--text-main);
+}
+
+/* Let text columns wrap and break if needed */
+.modern-table td:nth-child(1),
+.modern-table td:nth-child(2),
+.modern-table td:nth-child(3),
+.modern-table td:nth-child(4) {
+  white-space: normal;
+  word-break: break-all;
+}
+
+/* Ensure inner divs in tight columns don't force weird behaviors */
+.modern-table td > div {
+  white-space: inherit;
+}
+
+@media screen and (max-width: 1350px) {
+  .modern-table thead {
+    display: none;
+  }
+  .modern-table tr {
+    display: block;
+    margin-bottom: 1rem;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0.5rem;
+  }
+  .modern-table td {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    border-bottom: 1px solid #f1f5f9;
+    padding: 0.75rem 0.5rem;
+    text-align: left;
+    word-break: break-word;
+  }
+  .modern-table td:last-child {
+    border-bottom: none;
+  }
+  .modern-table td::before {
+    content: attr(data-label);
+    font-weight: 700;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    margin-bottom: 0.4rem;
+  }
+  .actions > div, .action-buttons {
+    justify-content: flex-start !important;
+    flex-wrap: wrap;
+    width: 100%;
+  }
 }
 
 .badge.action {
@@ -92,7 +161,7 @@ h1 {
   width: 180px;
 }
 
-.edit-actions {
+.action-buttons {
   display: flex;
   gap: 0.5rem;
   justify-content: flex-start;
@@ -117,6 +186,66 @@ h1 {
   transform: translateY(-1px);
 }
 
+.btn-success {
+  background: #10b981;
+  color: white;
+}
+.btn-success:hover {
+  background: #059669;
+  transform: translateY(-1px);
+}
+
+.btn-success:disabled {
+  background: #6ee7b7;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-sidebar {
+  background: var(--sidebar-bg);
+  color: white;
+}
+
+.btn-sidebar:hover {
+  background: var(--sidebar-hover);
+  transform: translateY(-1px);
+}
+
+.btn-action-edit {
+  background: #dbeafe;
+  color: #1e40af;
+}
+
+.btn-action-edit:hover {
+  background: #bfdbfe;
+  transform: translateY(-1px);
+}
+
+.btn-action-import {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.btn-action-import:hover {
+  background: #bbf7d0;
+  transform: translateY(-1px);
+}
+
+.btn-action-import:disabled {
+  background: #e2e8f0;
+  color: #94a3b8;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.btn-icon {
+  padding: 0.5rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+}
+
 .btn-secondary { 
   background: var(--accent); 
   color: white; 
@@ -129,8 +258,14 @@ h1 {
 .btn-save { background: var(--accent); color: white; }
 .btn-save:hover { background: var(--accent-hover); }
 
-.btn-cancel { background: var(--sidebar-bg); color: white; }
-.btn-cancel:hover { opacity: 0.9; }
+.btn-cancel {
+  background: #dbeafe;
+  color: #1e40af;
+}
+.btn-cancel:hover {
+  background: #bfdbfe;
+  transform: translateY(-1px);
+}
 
 .empty-state {
   text-align: center;
@@ -138,3 +273,125 @@ h1 {
   color: var(--text-muted);
   font-style: italic;
 }
+
+/* Expandable row styles */
+.expandable-row {
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.expandable-row:hover {
+  background-color: #f8fafc;
+}
+
+.expandable-row.expanded {
+  background-color: #f1f5f9;
+}
+
+.expand-icon {
+  display: inline-block;
+  width: 20px;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  transition: transform 0.2s ease;
+}
+
+/* Scans Sub-Table */
+.scans-row {
+  background-color: #fafafa;
+}
+
+.scans-cell {
+  padding: 0 !important;
+  border-bottom: 2px solid var(--border) !important;
+}
+
+.scans-container {
+  margin: 1rem 2rem;
+  padding: 1.5rem;
+  background: white;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.scans-title {
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: var(--text-main);
+}
+
+.scans-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.scans-table th {
+  padding: 0.75rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+}
+
+.scans-table td {
+  padding: 0.75rem;
+  font-size: 0.85rem;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.scans-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.mono-text {
+  font-family: monospace;
+  color: #64748b;
+}
+
+.badge.status {
+  font-size: 0.7rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.badge.status.completed {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.badge.status.running {
+  background: #fef08a;
+  color: #854d0e;
+}
+
+.badge.status.queued, .badge.status.pending {
+  background: #e2e8f0;
+  color: #475569;
+}
+
+.badge.status.error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.badge.status.superseded {
+  background: #f3f4f6;
+  color: #9ca3af;
+  text-decoration: line-through;
+}
+
+.empty-state-small {
+  color: var(--text-muted);
+  font-style: italic;
+  font-size: 0.9rem;
+  margin: 0;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+

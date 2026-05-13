@@ -2,7 +2,8 @@ import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
 import { FileService, ProcessedFile } from '../../services/file.service';
-import { concatMap, from, tap, finalize } from 'rxjs';
+import { ConfigService, ImportConfig } from '../../services/config.service';
+import { concatMap, from, tap, finalize, catchError, of } from 'rxjs';
 
 @Component({
   selector: 'app-details',
@@ -25,10 +26,35 @@ export class DetailsComponent implements OnInit {
   processAllProgress = 0;
   processAllTotal = 0;
 
-  constructor(private fileService: FileService) {}
+  // Configuraciones para el filtro
+  configs: ImportConfig[] = [];
+
+  // Paginación
+  currentPage = 1;
+  pageSize = 50;
+  pageSizeOptions = [50, 100, 200];
+
+  // Filtros
+  showFilters: boolean = false;
+  filterFileName: string = '';
+  filterSourcePath: string = '';
+  filterAction: string = '';
+  filterStatus: string = '';
+
+  constructor(
+    private fileService: FileService,
+    private configService: ConfigService
+  ) {}
 
   ngOnInit() {
     this.loadFiles();
+    this.loadConfigs();
+  }
+
+  loadConfigs() {
+    this.configService.getConfigs().subscribe(res => {
+      this.configs = res;
+    });
   }
 
   loadFiles() {
@@ -37,13 +63,67 @@ export class DetailsComponent implements OnInit {
     });
   }
 
-  /** Ficheros que aún se pueden procesar */
+  get filteredFiles(): ProcessedFile[] {
+    if (!this.showFilters) {
+      return this.files;
+    }
+    
+    return this.files.filter(file => {
+      const matchName = !this.filterFileName || (file.original_filename && file.original_filename.toLowerCase().includes(this.filterFileName.toLowerCase()));
+      const matchPath = !this.filterSourcePath || (file.original_path && file.original_path.toLowerCase().includes(this.filterSourcePath.toLowerCase()));
+      const matchAction = !this.filterAction || file.action === this.filterAction;
+      const matchStatus = !this.filterStatus || file.status === this.filterStatus;
+      return matchName && matchPath && matchAction && matchStatus;
+    });
+  }
+
+  /** Ficheros que aún se pueden procesar respetando los filtros actuales */
   get actionableFiles(): ProcessedFile[] {
-    return this.files.filter(f => f.status === 'pending' || f.status === 'error');
+    return this.filteredFiles.filter(f => f.status === 'pending' || f.status === 'error');
   }
 
   get pendingCount(): number {
     return this.actionableFiles.length;
+  }
+
+  onFilterChange() {
+    this.currentPage = 1;
+  }
+
+  toggleFilters() {
+    this.showFilters = !this.showFilters;
+    this.currentPage = 1;
+  }
+
+  // ── Paginación ────────────────────────────────────────────────────────────
+
+  get totalPages(): number {
+    return Math.ceil(this.filteredFiles.length / this.pageSize) || 1;
+  }
+
+  get paginatedFiles(): ProcessedFile[] {
+    const startIndex = (this.currentPage - 1) * this.pageSize;
+    return this.filteredFiles.slice(startIndex, startIndex + this.pageSize);
+  }
+
+  get currentRangeEnd(): number {
+    return Math.min(this.currentPage * this.pageSize, this.filteredFiles.length);
+  }
+
+  nextPage() {
+    if (this.currentPage < this.totalPages) {
+      this.currentPage++;
+    }
+  }
+
+  prevPage() {
+    if (this.currentPage > 1) {
+      this.currentPage--;
+    }
+  }
+
+  onPageSizeChange() {
+    this.currentPage = 1;
   }
 
   // ── Process individual ────────────────────────────────────────────────────
@@ -90,13 +170,14 @@ export class DetailsComponent implements OnInit {
     from(targets).pipe(
       concatMap(file =>
         this.fileService.processFile(file.id).pipe(
-          tap({
-            next: () => { this.processAllProgress++; },
-            error: (err) => {
-              this.processAllProgress++;
-              const msg = err.error?.detail || 'Error connecting to NAS';
-              this.processErrorMap[file.id] = msg;
-            }
+          tap(() => {
+            this.processAllProgress++;
+          }),
+          catchError((err) => {
+            this.processAllProgress++;
+            const msg = err.error?.detail || 'Error connecting to NAS';
+            this.processErrorMap[file.id] = msg;
+            return of(null); // Prevents the outer stream from failing and stopping
           })
         )
       ),
@@ -104,7 +185,7 @@ export class DetailsComponent implements OnInit {
         this.isProcessingAll = false;
         this.loadFiles();
       })
-    ).subscribe({ error: () => {} }); // errores individuales ya capturados en tap
+    ).subscribe();
   }
 
   // ── Edit inline ───────────────────────────────────────────────────────────

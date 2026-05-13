@@ -9,6 +9,7 @@ export interface ImportConfig {
   path_template: string;
   name_template: string;
   action: string;
+  import_status?: string;
 }
 
 @Injectable({
@@ -29,5 +30,17 @@ export class ConfigService {
 
   updateConfig(id: number, config: ImportConfig): Observable<any> {
     return this.http.put(`${this.apiUrl}/${id}`, config);
+  }
+
+  triggerScan(id: number): Observable<any> {
+    return this.http.post(`${this.apiUrl}/${id}/scan`, {});
+  }
+
+  getScans(id: number): Observable<any[]> {
+    return this.http.get<any[]>(`${this.apiUrl}/${id}/scans`);
+  }
+
+  triggerImport(id: number): Observable<any> {
+    return this.http.post(`${this.apiUrl}/${id}/import`, {});
   }
 }
