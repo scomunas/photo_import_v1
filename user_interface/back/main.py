@@ -278,9 +278,23 @@ async def get_daily_stats(start_date: str = None, end_date: str = None):
     return database.get_daily_stats(start_date, end_date)
 
 @app.get("/files")
-async def get_files(status: str = None):
-    """Obtiene el listado de archivos procesados."""
-    return database.get_all_files(status)
+async def get_files(
+    limit: int = 50,
+    offset: int = 0,
+    status: str = None,
+    filename: str = None,
+    source_path: str = None,
+    action: str = None
+):
+    """Obtiene el listado de archivos procesados y paginados."""
+    return database.get_all_files(
+        limit=limit,
+        offset=offset,
+        status=status,
+        filename=filename,
+        source_path=source_path,
+        action=action
+    )
 
 @app.put("/files/{file_id}")
 async def update_file(file_id: int, data: dict):
@@ -289,16 +303,15 @@ async def update_file(file_id: int, data: dict):
         return {"status": "success"}
     raise HTTPException(status_code=500, detail="Failed to update file")
 
-@app.post("/files/{file_id}/process")
-async def process_file(file_id: int):
-    """Ordena al NAS server que mueva/copie el fichero y actualiza el estado en BD."""
+async def _do_process_file(file_id: int):
+    """Lógica interna para procesar un solo archivo."""
     # 1. Leer el registro
     file = database.get_file_by_id(file_id)
     if not file:
-        raise HTTPException(status_code=404, detail="File record not found")
+        return {"status": "error", "detail": "File record not found"}
 
     action = file.get("action", "move")
-    print(f"[PROCESS] Iniciando '{action}' para: {file['original_filename']}")
+    logging.info(f"[PROCESS] Iniciando '{action}' para: {file['original_filename']}")
 
     # 2. Llamar al NAS server
     try:
@@ -318,31 +331,57 @@ async def process_file(file_id: int):
             )
         if response.status_code == 200:
             database.set_file_status(file_id, "completed")
-            print(f"[PROCESS] OK: {file['original_filename']} -> completed")
+            logging.info(f"[PROCESS] OK: {file['original_filename']} -> completed")
             return {"status": "completed", "file_id": file_id}
         else:
             error_msg = response.json().get("detail", f"NAS error {response.status_code}")
             database.set_file_status(file_id, "error", error_msg)
-            print(f"[PROCESS] Error NAS: {error_msg}")
-            raise HTTPException(status_code=502, detail=error_msg)
+            logging.error(f"[PROCESS] Error NAS para {file['original_filename']}: {error_msg}")
+            return {"status": "error", "detail": error_msg}
 
     except httpx.ConnectError:
         error_msg = "NAS server unreachable"
         database.set_file_status(file_id, "error", error_msg)
-        print(f"[PROCESS] {error_msg}")
-        raise HTTPException(status_code=503, detail=error_msg)
+        return {"status": "error", "detail": error_msg}
     except httpx.TimeoutException:
         error_msg = "NAS server timeout"
         database.set_file_status(file_id, "error", error_msg)
-        print(f"[PROCESS] {error_msg}")
-        raise HTTPException(status_code=504, detail=error_msg)
-    except HTTPException:
-        raise
+        return {"status": "error", "detail": error_msg}
     except Exception as e:
         error_msg = str(e)
         database.set_file_status(file_id, "error", error_msg)
-        print(f"[PROCESS] Excepción inesperada: {error_msg}")
-        raise HTTPException(status_code=500, detail=error_msg)
+        logging.error(f"[PROCESS] Excepción inesperada para {file['original_filename']}: {error_msg}")
+        return {"status": "error", "detail": error_msg}
+
+@app.post("/files/{file_id}/process")
+async def process_file(file_id: int):
+    """Ordena al NAS server que mueva/copie el fichero y actualiza el estado en BD."""
+    res = await _do_process_file(file_id)
+    if res["status"] == "error":
+        # Mantenemos compatibilidad con los códigos de error anteriores si es posible
+        if "unreachable" in res["detail"]: raise HTTPException(status_code=503, detail=res["detail"])
+        if "timeout" in res["detail"]: raise HTTPException(status_code=504, detail=res["detail"])
+        raise HTTPException(status_code=500, detail=res["detail"])
+    return res
+
+async def run_process_all(filters: dict):
+    """Tarea en segundo plano para procesar múltiples archivos."""
+    ids = database.get_actionable_file_ids(
+        status=filters.get('status'),
+        filename=filters.get('filename'),
+        source_path=filters.get('source_path'),
+        action=filters.get('action')
+    )
+    logging.info(f"[PROCESS-ALL] Iniciando proceso para {len(ids)} archivos.")
+    for file_id in ids:
+        await _do_process_file(file_id)
+    logging.info(f"[PROCESS-ALL] Finalizado.")
+
+@app.post("/files/process-all")
+async def process_all_files(filters: dict, background_tasks: BackgroundTasks):
+    """Procesa todos los archivos pendientes que coincidan con los filtros."""
+    background_tasks.add_task(run_process_all, filters)
+    return {"status": "processing"}
 
 @app.get("/")
 def read_root():

@@ -14,6 +14,8 @@ import { concatMap, from, tap, finalize, catchError, of } from 'rxjs';
 })
 export class DetailsComponent implements OnInit {
   files: ProcessedFile[] = [];
+  totalFiles: number = 0;
+  pendingTotal: number = 0;
   editingFileId: number | null = null;
   editData: Partial<ProcessedFile> = {};
 
@@ -58,72 +60,70 @@ export class DetailsComponent implements OnInit {
   }
 
   loadFiles() {
-    this.fileService.getFiles().subscribe(res => {
-      this.files = res;
-    });
-  }
-
-  get filteredFiles(): ProcessedFile[] {
-    if (!this.showFilters) {
-      return this.files;
-    }
+    const filters = {
+      filename: this.showFilters ? this.filterFileName : '',
+      source_path: this.showFilters ? this.filterSourcePath : '',
+      action: this.showFilters ? this.filterAction : '',
+      status: this.showFilters ? this.filterStatus : ''
+    };
+    const offset = (this.currentPage - 1) * this.pageSize;
     
-    return this.files.filter(file => {
-      const matchName = !this.filterFileName || (file.original_filename && file.original_filename.toLowerCase().includes(this.filterFileName.toLowerCase()));
-      const matchPath = !this.filterSourcePath || (file.original_path && file.original_path.toLowerCase().includes(this.filterSourcePath.toLowerCase()));
-      const matchAction = !this.filterAction || file.action === this.filterAction;
-      const matchStatus = !this.filterStatus || file.status === this.filterStatus;
-      return matchName && matchPath && matchAction && matchStatus;
+    this.fileService.getFiles(this.pageSize, offset, filters).subscribe(res => {
+      this.files = res.data;
+      this.totalFiles = res.total;
+      this.pendingTotal = res.pending_total;
     });
   }
 
-  /** Ficheros que aún se pueden procesar respetando los filtros actuales */
-  get actionableFiles(): ProcessedFile[] {
-    return this.filteredFiles.filter(f => f.status === 'pending' || f.status === 'error');
-  }
-
+  /** Ficheros que aún se pueden procesar respetando los filtros actuales (obtenido del backend) */
   get pendingCount(): number {
-    return this.actionableFiles.length;
+    return this.pendingTotal;
   }
 
   onFilterChange() {
     this.currentPage = 1;
+    this.loadFiles();
   }
 
   toggleFilters() {
     this.showFilters = !this.showFilters;
+    if (!this.showFilters) {
+      this.filterFileName = '';
+      this.filterSourcePath = '';
+      this.filterAction = '';
+      this.filterStatus = '';
+    }
     this.currentPage = 1;
+    this.loadFiles();
   }
 
   // ── Paginación ────────────────────────────────────────────────────────────
 
   get totalPages(): number {
-    return Math.ceil(this.filteredFiles.length / this.pageSize) || 1;
-  }
-
-  get paginatedFiles(): ProcessedFile[] {
-    const startIndex = (this.currentPage - 1) * this.pageSize;
-    return this.filteredFiles.slice(startIndex, startIndex + this.pageSize);
+    return Math.ceil(this.totalFiles / this.pageSize) || 1;
   }
 
   get currentRangeEnd(): number {
-    return Math.min(this.currentPage * this.pageSize, this.filteredFiles.length);
+    return Math.min(this.currentPage * this.pageSize, this.totalFiles);
   }
 
   nextPage() {
     if (this.currentPage < this.totalPages) {
       this.currentPage++;
+      this.loadFiles();
     }
   }
 
   prevPage() {
     if (this.currentPage > 1) {
       this.currentPage--;
+      this.loadFiles();
     }
   }
 
   onPageSizeChange() {
     this.currentPage = 1;
+    this.loadFiles();
   }
 
   // ── Process individual ────────────────────────────────────────────────────
@@ -159,33 +159,35 @@ export class DetailsComponent implements OnInit {
   // ── Process All ───────────────────────────────────────────────────────────
 
   processAll() {
-    const targets = this.actionableFiles;
-    if (!targets.length || this.isProcessingAll) return;
+    if (this.pendingTotal === 0 || this.isProcessingAll) return;
 
     this.isProcessingAll = true;
     this.processAllProgress = 0;
-    this.processAllTotal = targets.length;
+    this.processAllTotal = this.pendingTotal;
     this.processErrorMap = {};
 
-    from(targets).pipe(
-      concatMap(file =>
-        this.fileService.processFile(file.id).pipe(
-          tap(() => {
-            this.processAllProgress++;
-          }),
-          catchError((err) => {
-            this.processAllProgress++;
-            const msg = err.error?.detail || 'Error connecting to NAS';
-            this.processErrorMap[file.id] = msg;
-            return of(null); // Prevents the outer stream from failing and stopping
-          })
-        )
-      ),
-      finalize(() => {
+    const filters = {
+      filename: this.showFilters ? this.filterFileName : '',
+      source_path: this.showFilters ? this.filterSourcePath : '',
+      action: this.showFilters ? this.filterAction : '',
+      status: this.showFilters ? this.filterStatus : ''
+    };
+
+    this.fileService.processAllFiles(filters).subscribe({
+      next: () => {
+        // Since it runs in background, we just inform the user and maybe start a refresh interval
+        // For now, we'll just stop the "loading" state and let the user refresh manually or wait
+        // But a simple way is to reload files after a bit
+        setTimeout(() => {
+          this.isProcessingAll = false;
+          this.loadFiles();
+        }, 2000);
+      },
+      error: (err) => {
         this.isProcessingAll = false;
-        this.loadFiles();
-      })
-    ).subscribe();
+        console.error('Error starting process all', err);
+      }
+    });
   }
 
   // ── Edit inline ───────────────────────────────────────────────────────────

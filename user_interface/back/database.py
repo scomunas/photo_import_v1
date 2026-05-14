@@ -93,22 +93,80 @@ def save_processed_file(data):
     finally:
         if 'conn' in locals(): conn.close()
 
-def get_all_files(status=None):
-    """Obtiene el listado de archivos filtrado por estado."""
+def get_all_files(limit=50, offset=0, status=None, filename=None, source_path=None, action=None):
+    """Obtiene el listado de archivos filtrado y paginado, junto con el total."""
     try:
         conn = get_connection()
         with conn.cursor(cursor_factory=RealDictCursor) as cur:
-            query = "SELECT * FROM processed_files"
+            base_query = "FROM processed_files"
+            conditions = []
             params = []
+            
             if status:
-                query += " WHERE status = %s"
-                params = [status]
-            query += " ORDER BY created_at DESC"
-            cur.execute(query, params)
-            return cur.fetchall()
+                conditions.append("status = %s")
+                params.append(status)
+            if filename:
+                conditions.append("original_filename ILIKE %s")
+                params.append(f"%{filename}%")
+            if source_path:
+                conditions.append("original_path LIKE %s || '%%'")
+                params.append(source_path)
+            if action:
+                conditions.append("action = %s")
+                params.append(action)
+                
+            where_clause = ""
+            if conditions:
+                where_clause = " WHERE " + " AND ".join(conditions)
+                
+            # Total count
+            count_query = f"SELECT COUNT(*) {base_query} {where_clause}"
+            cur.execute(count_query, params)
+            total_count = cur.fetchone()['count']
+            
+            # Pending total (subset that is pending/error matching filters)
+            # If status filter is already 'pending' or 'error', pending_total == total_count
+            # If status filter is 'completed', pending_total == 0
+            # If no status filter, count where status IN ('pending', 'error')
+            pending_conditions = [c for c in conditions if "status =" not in c]
+            pending_params = [p for i, p in enumerate(params) if "status =" not in conditions[i]]
+            
+            if status:
+                if status in ['pending', 'error']:
+                    pending_conditions.append("status = %s")
+                    pending_params.append(status)
+                else:
+                    # Filtered by completed, so no actionable files
+                    pass # We'll handle this by not matching status completed with pending/error
+            else:
+                pending_conditions.append("status IN ('pending', 'error')")
+                
+            pending_where = ""
+            if pending_conditions:
+                pending_where = " WHERE " + " AND ".join(pending_conditions)
+            
+            # If status was 'completed', the intersection with status IN ('pending', 'error') 
+            # should be empty if we combined them. 
+            # But the logic above: if status is 'completed', we don't add status filter to pending_conditions.
+            # Wait, if status is 'completed', we want pending_total to be 0 for THAT filter.
+            
+            if status == 'completed':
+                pending_total = 0
+            else:
+                pending_count_query = f"SELECT COUNT(*) {base_query} {pending_where}"
+                cur.execute(pending_count_query, pending_params)
+                pending_total = cur.fetchone()['count']
+            
+            # Paginated data
+            data_query = f"SELECT * {base_query} {where_clause} ORDER BY created_at DESC LIMIT %s OFFSET %s"
+            data_params = params + [limit, offset]
+            cur.execute(data_query, data_params)
+            data = cur.fetchall()
+            
+            return {"data": data, "total": total_count, "pending_total": pending_total}
     except Exception as e:
         print(f"[ERROR] Error obteniendo archivos: {e}")
-        return []
+        return {"data": [], "total": 0}
     finally:
         if 'conn' in locals(): conn.close()
 
@@ -361,5 +419,45 @@ def set_config_import_status(config_id, status):
     except Exception as e:
         print(f"[ERROR] Error actualizando estado de importación para config {config_id}: {e}")
         return False
+    finally:
+        if 'conn' in locals(): conn.close()
+
+def get_actionable_file_ids(status=None, filename=None, source_path=None, action=None):
+    """Obtiene todos los IDs de archivos pendientes o con error que coincidan con los filtros."""
+    try:
+        conn = get_connection()
+        with conn.cursor(cursor_factory=RealDictCursor) as cur:
+            conditions = []
+            params = []
+            
+            if status:
+                if status in ['pending', 'error']:
+                    conditions.append("status = %s")
+                    params.append(status)
+                else:
+                    return []
+            else:
+                conditions.append("status IN ('pending', 'error')")
+                
+            if filename:
+                conditions.append("original_filename ILIKE %s")
+                params.append(f"%{filename}%")
+            if source_path:
+                conditions.append("original_path LIKE %s || '%%'")
+                params.append(source_path)
+            if action:
+                conditions.append("action = %s")
+                params.append(action)
+                
+            where_clause = ""
+            if conditions:
+                where_clause = " WHERE " + " AND ".join(conditions)
+                
+            query = f"SELECT id FROM processed_files {where_clause}"
+            cur.execute(query, params)
+            return [row['id'] for row in cur.fetchall()]
+    except Exception as e:
+        print(f"[ERROR] Error obteniendo IDs accionables: {e}")
+        return []
     finally:
         if 'conn' in locals(): conn.close()
