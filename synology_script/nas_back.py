@@ -333,11 +333,19 @@ async def extract_metadata(payload: MetadataRequest, api_key: str = Depends(veri
     ext = os.path.splitext(payload.file_path)[1].lower()
     date_taken, source = None, "unknown"
     is_camera = False
+    whatsapp = False
+
+    # Check for WhatsApp by filename pattern first
+    if "WA" in filename:
+        whatsapp = True
+        is_camera = False
+    else:
+        whatsapp = False
 
     if ext in PHOTO_EXTENSIONS:
         date_taken = get_exif_date(payload.file_path)
         source = "exif" if date_taken else source
-        if date_taken:
+        if date_taken and not whatsapp:
             try:
                 with open(payload.file_path, 'rb') as f:
                     tags = exifread.process_file(f, details=False)
@@ -351,7 +359,8 @@ async def extract_metadata(payload: MetadataRequest, api_key: str = Depends(veri
         if date_taken:
             date_taken = to_spain_tz(date_taken, is_utc=True)
             source = "hachoir"
-            is_camera = True
+            if not whatsapp:
+                is_camera = True
 
     if not date_taken:
         date_taken = get_date_from_filename(filename)
@@ -370,12 +379,13 @@ async def extract_metadata(payload: MetadataRequest, api_key: str = Depends(veri
     if date_taken and date_taken.tzinfo is not None:
         date_taken = date_taken.replace(tzinfo=None)
 
-    logger.debug(f"Metadata result for {filename}: {date_taken} (Source: {source}), is_camera: {is_camera}")
+    logger.debug(f"Metadata result for {filename}: {date_taken} (Source: {source}), is_camera: {is_camera}, whatsapp: {whatsapp}")
     return {
         "filename": filename,
         "date_taken": date_taken.isoformat() if date_taken else None,
         "source": source,
-        "is_camera": is_camera
+        "is_camera": is_camera,
+        "whatsapp": whatsapp
     }
 
 @app.post("/file")

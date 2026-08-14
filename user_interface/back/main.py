@@ -95,6 +95,7 @@ async def receive_file(data: FileData):
         raise HTTPException(status_code=404, detail="Import Config not found")
 
     is_camera = True
+    whatsapp = False
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             headers = {"X-API-KEY": NAS_API_KEY}
@@ -107,23 +108,29 @@ async def receive_file(data: FileData):
             if response.status_code == 200:
                 meta = response.json()
                 is_camera = meta.get("is_camera", True)
+                whatsapp = meta.get("whatsapp", False)
                 if meta.get("date_taken"):
                     data_dict["date_taken"] = meta["date_taken"]
     except Exception as e:
         print(f"[WARNING] Failed to fetch metadata from NAS: {e}")
+        if "WA" in data_dict['filename']:
+            whatsapp = True
+            is_camera = False
 
     # 2. Calcular Destino
     target_folder = resolve_template(config['path_template'], data_dict)
     target_filename_raw = resolve_template(config['name_template'], data_dict)
     
-    # Asegurar extensión y añadir _other si no es de cámara
+    # Asegurar extensión y añadir _wa o _other
     ext = os.path.splitext(data_dict['filename'])[1]
     if not target_filename_raw.lower().endswith(ext.lower()):
         target_filename_no_ext = target_filename_raw
     else:
         target_filename_no_ext = target_filename_raw[:-len(ext)]
         
-    if not is_camera:
+    if whatsapp:
+        target_filename_no_ext += "_wa"
+    elif not is_camera:
         target_filename_no_ext += "_other"
         
     target_filename = target_filename_no_ext + ext
@@ -141,7 +148,8 @@ async def receive_file(data: FileData):
         "target_filename": target_filename,
         "date_taken": data_dict['date_taken'],
         "action": config.get('action', 'move'),
-        "is_camera": is_camera
+        "is_camera": is_camera,
+        "whatsapp": whatsapp
     })
 
     if not success:
@@ -253,14 +261,18 @@ async def process_import(config: dict):
                         target_folder = resolve_template(config['path_template'], data_dict)
                         target_filename_raw = resolve_template(config['name_template'], data_dict)
                         
+                        is_camera = meta.get("is_camera", True)
+                        whatsapp = meta.get("whatsapp", False)
+
                         ext = os.path.splitext(file['file_name'])[1]
                         if not target_filename_raw.lower().endswith(ext.lower()):
                             target_filename_no_ext = target_filename_raw
                         else:
                             target_filename_no_ext = target_filename_raw[:-len(ext)]
                             
-                        is_camera = meta.get("is_camera", True)
-                        if not is_camera:
+                        if whatsapp:
+                            target_filename_no_ext += "_wa"
+                        elif not is_camera:
                             target_filename_no_ext += "_other"
                             
                         target_filename = target_filename_no_ext + ext
@@ -274,7 +286,8 @@ async def process_import(config: dict):
                             "target_filename": target_filename,
                             "date_taken": date_taken,
                             "action": config.get('action', 'move'),
-                            "is_camera": is_camera
+                            "is_camera": is_camera,
+                            "whatsapp": whatsapp
                         })
                         if success:
                             processed_count += 1

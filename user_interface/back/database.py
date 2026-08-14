@@ -57,6 +57,10 @@ def init_db():
             ALTER TABLE processed_files 
             ADD COLUMN IF NOT EXISTS is_camera BOOLEAN DEFAULT TRUE
         """)
+        cur.execute("""
+            ALTER TABLE processed_files 
+            ADD COLUMN IF NOT EXISTS whatsapp BOOLEAN DEFAULT FALSE
+        """)
     conn.commit()
     conn.close()
 
@@ -85,11 +89,11 @@ def save_processed_file(data):
         with conn.cursor() as cur:
             cur.execute("""
                 INSERT INTO processed_files 
-                (original_path, original_filename, target_path, target_filename, date_taken, action, is_camera, status)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, 'pending')
+                (original_path, original_filename, target_path, target_filename, date_taken, action, is_camera, whatsapp, status)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'pending')
             """, (data['original_path'], data['original_filename'], 
                   data['target_path'], data['target_filename'], data['date_taken'], 
-                  data.get('action', 'move'), data.get('is_camera', True)))
+                  data.get('action', 'move'), data.get('is_camera', True), data.get('whatsapp', False)))
         conn.commit()
         return True
     except Exception as e:
