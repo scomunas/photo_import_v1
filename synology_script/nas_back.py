@@ -7,7 +7,7 @@ import psycopg2
 import exifread
 import re
 import logging
-from datetime import datetime
+from datetime import datetime, timezone, timedelta, tzinfo
 from psycopg2.extras import execute_values, DictCursor
 from fastapi import FastAPI, HTTPException, BackgroundTasks, Depends
 from fastapi.security.api_key import APIKeyHeader
@@ -119,6 +119,51 @@ async def verify_api_key(header_value: str = Depends(api_key_header)):
         logger.warning(f"SECURITY ALERT: Invalid API Key attempt: {header_value}")
         raise HTTPException(status_code=403, detail="Invalid API Key")
     return header_value
+
+# --- TIMEZONE UTILS ---
+try:
+    from zoneinfo import ZoneInfo
+    MADRID_TZ = ZoneInfo("Europe/Madrid")
+except Exception:
+    class MadridTZ(tzinfo):
+        def utcoffset(self, dt):
+            if self._is_dst(dt):
+                return timedelta(hours=2)
+            return timedelta(hours=1)
+        
+        def dst(self, dt):
+            if self._is_dst(dt):
+                return timedelta(hours=1)
+            return timedelta(0)
+        
+        def tzname(self, dt):
+            return "CEST" if self._is_dst(dt) else "CET"
+        
+        def _is_dst(self, dt):
+            if dt is None:
+                return False
+            if dt.month < 3 or dt.month > 10:
+                return False
+            if dt.month > 3 and dt.month < 10:
+                return True
+            last_sun_march = 31 - (datetime(dt.year, 3, 31).weekday() + 1) % 7
+            last_sun_oct = 31 - (datetime(dt.year, 10, 31).weekday() + 1) % 7
+            if dt.month == 3:
+                return dt.day >= last_sun_march
+            if dt.month == 10:
+                return dt.day < last_sun_oct
+            return False
+    MADRID_TZ = MadridTZ(timedelta(hours=1), name="Europe/Madrid")
+
+def to_spain_tz(dt, is_utc=False):
+    if dt is None:
+        return None
+    if dt.tzinfo is not None:
+        return dt.astimezone(MADRID_TZ)
+    if is_utc:
+        dt_utc = dt.replace(tzinfo=timezone.utc)
+        return dt_utc.astimezone(MADRID_TZ)
+    return dt
 
 # --- METADATA UTILS ---
 def get_exif_date(file_path):
@@ -287,13 +332,26 @@ async def extract_metadata(payload: MetadataRequest, api_key: str = Depends(veri
     filename = os.path.basename(payload.file_path)
     ext = os.path.splitext(payload.file_path)[1].lower()
     date_taken, source = None, "unknown"
+    is_camera = False
 
     if ext in PHOTO_EXTENSIONS:
         date_taken = get_exif_date(payload.file_path)
         source = "exif" if date_taken else source
+        if date_taken:
+            try:
+                with open(payload.file_path, 'rb') as f:
+                    tags = exifread.process_file(f, details=False)
+                    make = tags.get('Image Make') or tags.get('EXIF Make')
+                    if make and str(make).strip():
+                        is_camera = True
+            except Exception as e:
+                logger.debug(f"Failed to check photo Make for {payload.file_path}: {e}")
     elif ext in VIDEO_EXTENSIONS:
         date_taken = get_video_date(payload.file_path)
-        source = "hachoir" if date_taken else source
+        if date_taken:
+            date_taken = to_spain_tz(date_taken, is_utc=True)
+            source = "hachoir"
+            is_camera = True
 
     if not date_taken:
         date_taken = get_date_from_filename(filename)
@@ -301,12 +359,24 @@ async def extract_metadata(payload: MetadataRequest, api_key: str = Depends(veri
 
     if not date_taken:
         st = os.stat(payload.file_path)
-        try: date_taken = datetime.fromtimestamp(st.st_birthtime)
-        except AttributeError: date_taken = datetime.fromtimestamp(st.st_ctime)
+        try:
+            timestamp = st.st_birthtime
+        except AttributeError:
+            timestamp = st.st_ctime
+        date_taken = datetime.fromtimestamp(timestamp, tz=MADRID_TZ)
         source = "os_stats"
 
-    logger.debug(f"Metadata result for {filename}: {date_taken} (Source: {source})")
-    return {"filename": filename, "date_taken": date_taken.isoformat(), "source": source}
+    # Convert to naive local datetime to store the correct local wall-clock hours in the DB
+    if date_taken and date_taken.tzinfo is not None:
+        date_taken = date_taken.replace(tzinfo=None)
+
+    logger.debug(f"Metadata result for {filename}: {date_taken} (Source: {source}), is_camera: {is_camera}")
+    return {
+        "filename": filename,
+        "date_taken": date_taken.isoformat() if date_taken else None,
+        "source": source,
+        "is_camera": is_camera
+    }
 
 @app.post("/file")
 async def file_operation(payload: FileOperationRequest, api_key: str = Depends(verify_api_key)):

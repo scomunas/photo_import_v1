@@ -94,16 +94,39 @@ async def receive_file(data: FileData):
         print(f"[ERROR] Import Config not found for: {data_dict['path']}")
         raise HTTPException(status_code=404, detail="Import Config not found")
 
+    is_camera = True
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            headers = {"X-API-KEY": NAS_API_KEY}
+            file_path = f"{data_dict['path']}/{data_dict['filename']}".replace('\\', '/').replace('//', '/')
+            response = await client.post(
+                f"{NAS_SERVER_URL}/metadata",
+                json={"file_path": file_path},
+                headers=headers
+            )
+            if response.status_code == 200:
+                meta = response.json()
+                is_camera = meta.get("is_camera", True)
+                if meta.get("date_taken"):
+                    data_dict["date_taken"] = meta["date_taken"]
+    except Exception as e:
+        print(f"[WARNING] Failed to fetch metadata from NAS: {e}")
+
     # 2. Calcular Destino
     target_folder = resolve_template(config['path_template'], data_dict)
     target_filename_raw = resolve_template(config['name_template'], data_dict)
     
-    # Asegurar extensión
+    # Asegurar extensión y añadir _other si no es de cámara
     ext = os.path.splitext(data_dict['filename'])[1]
     if not target_filename_raw.lower().endswith(ext.lower()):
-        target_filename = target_filename_raw + ext
+        target_filename_no_ext = target_filename_raw
     else:
-        target_filename = target_filename_raw
+        target_filename_no_ext = target_filename_raw[:-len(ext)]
+        
+    if not is_camera:
+        target_filename_no_ext += "_other"
+        
+    target_filename = target_filename_no_ext + ext
 
     # Forzamos barras de Linux (/) y quitamos la barra final si existe
     final_target_path = os.path.join(config['target_path'], target_folder).replace('\\', '/').rstrip('/')
@@ -117,7 +140,8 @@ async def receive_file(data: FileData):
         "target_path": final_target_path,
         "target_filename": target_filename,
         "date_taken": data_dict['date_taken'],
-        "action": config.get('action', 'move')
+        "action": config.get('action', 'move'),
+        "is_camera": is_camera
     })
 
     if not success:
@@ -231,9 +255,15 @@ async def process_import(config: dict):
                         
                         ext = os.path.splitext(file['file_name'])[1]
                         if not target_filename_raw.lower().endswith(ext.lower()):
-                            target_filename = target_filename_raw + ext
+                            target_filename_no_ext = target_filename_raw
                         else:
-                            target_filename = target_filename_raw
+                            target_filename_no_ext = target_filename_raw[:-len(ext)]
+                            
+                        is_camera = meta.get("is_camera", True)
+                        if not is_camera:
+                            target_filename_no_ext += "_other"
+                            
+                        target_filename = target_filename_no_ext + ext
 
                         final_target_path = os.path.join(config['target_path'], target_folder).replace('\\', '/').rstrip('/')
 
@@ -243,7 +273,8 @@ async def process_import(config: dict):
                             "target_path": final_target_path,
                             "target_filename": target_filename,
                             "date_taken": date_taken,
-                            "action": config.get('action', 'move')
+                            "action": config.get('action', 'move'),
+                            "is_camera": is_camera
                         })
                         if success:
                             processed_count += 1
